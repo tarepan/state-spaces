@@ -53,62 +53,49 @@ Installation usually works out of the box with `pip install pykeops cmake` which
 
 Note that running in a Colab requires installing a different pip package; instructions can be found in the pykeops documentation.
 
-## S4 Experiments
+## Training
 
-Experiments in S4 paper and HiPPO paper.  
+### Experiments in S4 Paper
+Experiments in S4 paper can be reproduced with all-in-one argument.  
+`python -m train wandb=null experiment={exp_name}`  
 
-- [Testing](#Testing)
-- [Long Range Arena](#Long-Range-Arena)
-- [CIFAR-10](#CIFAR-10)
-- [Speech Commands](#Speech-Commands)
-- [WikiText-103](#WikiText-103)
-- [HiPPO pMNIST](#HiPPO-pMNIST)
+|         name          |    `experiment=`    |               notes                |
+| :-------------------: | :-----------------: | :--------------------------------: |
+|          LRA          |  `s4-lra-listops`   |                                    |
+|          LRA          |    `s4-lra-imdb`    |      Training Time: 1-2 hours      |
+|          LRA          |   `s4-lra-cifar`    |                                    |
+|          LRA          |    `s4-lra-aan`     |                                    |
+|          LRA          | `s4-lra-pathfinder` |                                    |
+|          LRA          |   `s4-lra-pathx`    |     Training Time: over a day      |
+|       CIFAR-10        |     `s4-cifar`      |                                    |
+| Speech Commands 10cls |       `s4-sc`       | 35 cls: `dataset.all_classes=true` |
+|     WikiText-103      |       `s4-sc`       |       8 GPUs w/ 32GB memory        |
 
-### Testing
+※ LRA: Long Range Arena  
 
-For testing, we frequently use synthetic datasets or the Permuted MNIST dataset.
-This can be run with `python -m train wandb=null pipeline=mnist model=s4`, which should get to around 90% after 1 epoch which takes 1-3 minutes depending on GPU.
-
-### Long Range Arena
-
-```
-python -m train wandb=null experiment=s4-lra-listops
-python -m train wandb=null experiment=s4-lra-imdb
-python -m train wandb=null experiment=s4-lra-cifar
-python -m train wandb=null experiment=s4-lra-aan
-python -m train wandb=null experiment=s4-lra-pathfinder
-python -m train wandb=null experiment=s4-lra-pathx
-```
-
-Note that these experiments may take different amounts of time to train. IMDB should take 1-2 hours, while Path-X will take several epochs to take off and take over a day to train to completion.
-
-### CIFAR-10
-
-```
-python -m train wandb=null experiment=s4-cifar
-```
-
-The above command line reproduces our best sequential CIFAR model. Decreasing the model size should yield close results, e.g. decreasing the hidden dimension and number of layers with `model.d_model=512 model.n_layers=4`.
-
-### Speech Commands
-
+#### Speech Commands
 The Speech Commands dataset that our [baselines](https://arxiv.org/abs/2005.08926) [use](https://arxiv.org/abs/2102.02611) is a modified smaller 10-way classification task.
 
+### General
+Equivalent training commands (upper is higher-abstracted)
+
+- `python -m train experiment={}`
+- `python -m train model={} pipeline={}`
+- `python -m train model={} loader={} dataset={} task={} encoder={} decoder={}`
+
+Above arguments switch pre-defined configs.  
+After that, you can override any params with `target.arg=value`.  
+
+For example, psMNIST task with 3layer/dim128/preBN S4 model is  
+```bash
+python -m train pipeline=mnist dataset.permute=True model=s4 model.n_layers=3 model.d_model=128 model.norm=batch model.prenorm=True wandb=null
 ```
-python -m train wandb=null experiment=s4-sc
-```
 
-To use the original version with the full 35 classes, pass in `dataset.all_classes=true`
+#### Training validation
+Light-weight task is usable.  
+`python -m train wandb=null pipeline=mnist model=s4`: 90% accuracy after 1 epoch (1-3 minutes on GPU).  
 
-### WikiText-103
-
-```
-python -m train wandb=null experiment=s4-wt103
-```
-
-The default settings require 8 GPUs with 32GB memory. Modifications can be made by decreasing batch size and accumulating gradients, e.g. `loader.batch_size=4 trainer.accumulate_grad_batches=2`
-
-### HiPPO pMNIST
+#### HiPPO pMNIST
 ```
 python train.py pipeline=mnist model=rnn/hippo-legs model.cell_args.hidden_size=512 train.epochs=50 train.batch_size=100 train.lr=0.001
 ```
@@ -119,40 +106,7 @@ One notable difference in this codebase is that some S4 parameters use different
 
 Our logic for setting these parameters can be found in the `OptimModule` class under `src/models/sequence/ss/kernel.py` and the corresponding optimizer hook in `SequenceLightningModule.configure_optimizers` under `train.py`.
 
-## Training
-
-The core training infrastructure of this repository is based on [Pytorch-Lightning](https://pytorch-lightning.readthedocs.io/en/latest/).
-The structure of this integration largely follows the Lightning+Hydra integration template described in https://github.com/ashleve/lightning-hydra-template.
-
-The main experiment entrypoint is `train.py` and configs are found in `configs/`.
-The end-to-end training pipeline can broken down into the following rough groups, where group XX is found under `configs/XX/`:
-```
-model: the sequence-to-sequence model backbone (e.g. a src.models.sequence.SequenceModel)
-dataset: the raw dataset (data/target pairs) (e.g. a pytorch Dataset)
-loader: how the data is loaded (e.g. a pytorch DataLoader)
-encoder: defines a Module that interfaces between data and model backbone
-decoder: defines a Module that interfaces between model backbone and targets
-task: specifies loss and metrics
-```
-Default combinations of dataset+loader+encoder+decoder+task are further consolidated into groups called `pipelines`.
-
-A run can be performed by passing in a pipeline config, model config,
-and any additional arguments modifying the default configurations.
-A simple example experiment is
-```
-python -m train pipeline=mnist dataset.permute=True model=s4 model.n_layers=3 model.d_model=128 model.norm=batch model.prenorm=True wandb=null
-```
-This uses the permuted sequential MNIST task and uses an s4 model with a specified number of layers, backbone dimension, and normalization type.
-
-
-### Registries
-
-This codebase uses a modification of the hydra `instantiate` utility that provides shorthand names of different classes, for convenience in configuration and logging.
-The mapping from shorthand to full path can be found in `src/utils/registry.py`.
-
-### Configuration and Logging
-Hydra & WandB  
-
+### Logging
 Logging with [WandB](https://wandb.ai/site) is built into this repository.
 In order to use this, simply set your `WANDB_API_KEY` environment variable, and change the `wandb.project` attribute of `configs/config.yaml` (or pass it on the command line `python -m train .... wandb.project=s4`).
 
@@ -195,8 +149,15 @@ and several other baselines have been ported.
 python -m train dataset=mnist model={ckconv,unicornn}
 ```
 
+## Codebase
+Infrastructure: PyTorch-Lightning & Hydra  
+The structure of this integration largely follows the Lightning+Hydra integration template described in https://github.com/ashleve/lightning-hydra-template.
 
-## Overall Repository Structure
+### Registries
+This codebase uses a modification of the hydra `instantiate` utility that provides shorthand names of different classes, for convenience in configuration and logging.
+The mapping from shorthand to full path can be found in `src/utils/registry.py`.
+
+### Overall Repository Structure
 ```
 configs/         config files for model, data pipeline, training loop, etc.
 data/            default location of raw data
