@@ -1,27 +1,5 @@
 # Structured State Spaces for Sequence Modeling
-
-This repository provides implementations and experiments for the following papers.
-
-## S4
-
-![Structured State Spaces](assets/properties.png "Properties of Structured State Spaces")
-> **Efficiently Modeling Long Sequences with Structured State Spaces**\
-> Albert Gu, Karan Goel, Christopher Ré\
-> Paper: https://arxiv.org/abs/2111.00396
-
-## LSSL
-
-![Linear State Space Layer](assets/splash.png "Properties of Sequential State Spaces")
-> **Combining Recurrent, Convolutional, and Continuous-time Models with the Linear State Space Layer**\
-> Albert Gu, Isys Johnson, Karan Goel, Khaled Saab, Tri Dao, Atri Rudra, Christopher Ré\
-> Paper: https://arxiv.org/abs/2110.13985
-
-## HiPPO
-![HiPPO Framework](assets/hippo.png "HiPPO Framework")
-> **HiPPO: Recurrent Memory with Optimal Polynomial Projections**\
-> Albert Gu*, Tri Dao*, Stefano Ermon, Atri Rudra, Christopher Ré\
-> Paper: https://arxiv.org/abs/2008.07669
-
+Implementations of S4/LSSL/HiPPO
 
 ## Setup
 
@@ -77,23 +55,21 @@ Note that running in a Colab requires installing a different pip package; instru
 
 ## S4 Experiments
 
-This section describes how to use the latest S4 model and reproduce experiments immediately.
-More detailed descriptions of the infrastructure are in the subsequent sections.
+Experiments in S4 paper and HiPPO paper.  
 
-### Structured State Space (S4)
-
-The S4 module is found at
-`src/models/sequence/ss/s4.py`.
-
-For users who would like to import a single file that has the self-contained S4 layer,
-a standalone version can be found at `src/models/sequence/ss/standalone/s4.py`.
+- [Testing](#Testing)
+- [Long Range Arena](#Long-Range-Arena)
+- [CIFAR-10](#CIFAR-10)
+- [Speech Commands](#Speech-Commands)
+- [WikiText-103](#WikiText-103)
+- [HiPPO pMNIST](#HiPPO-pMNIST)
 
 ### Testing
 
 For testing, we frequently use synthetic datasets or the Permuted MNIST dataset.
 This can be run with `python -m train wandb=null pipeline=mnist model=s4`, which should get to around 90% after 1 epoch which takes 1-3 minutes depending on GPU.
 
-### Long Range Arena (LRA)
+### Long Range Arena
 
 ```
 python -m train wandb=null experiment=s4-lra-listops
@@ -132,6 +108,10 @@ python -m train wandb=null experiment=s4-wt103
 
 The default settings require 8 GPUs with 32GB memory. Modifications can be made by decreasing batch size and accumulating gradients, e.g. `loader.batch_size=4 trainer.accumulate_grad_batches=2`
 
+### HiPPO pMNIST
+```
+python train.py pipeline=mnist model=rnn/hippo-legs model.cell_args.hidden_size=512 train.epochs=50 train.batch_size=100 train.lr=0.001
+```
 
 ### Optimizer Hyperparameters
 
@@ -141,12 +121,10 @@ Our logic for setting these parameters can be found in the `OptimModule` class u
 
 ## Training
 
-The core training infrastructure of this repository is based on [Pytorch-Lightning](https://pytorch-lightning.readthedocs.io/en/latest/) with a configuration scheme based on [Hydra](https://hydra.cc/docs/intro/).
+The core training infrastructure of this repository is based on [Pytorch-Lightning](https://pytorch-lightning.readthedocs.io/en/latest/).
 The structure of this integration largely follows the Lightning+Hydra integration template described in https://github.com/ashleve/lightning-hydra-template.
 
 The main experiment entrypoint is `train.py` and configs are found in `configs/`.
-In brief, the main config is found at `configs/config.yaml`, which is combined with other sets of configs that can be passed on the command line, to define an overall YAML config.
-Most config groups define one single Python object (e.g. a PyTorch nn.Module).
 The end-to-end training pipeline can broken down into the following rough groups, where group XX is found under `configs/XX/`:
 ```
 model: the sequence-to-sequence model backbone (e.g. a src.models.sequence.SequenceModel)
@@ -167,16 +145,13 @@ python -m train pipeline=mnist dataset.permute=True model=s4 model.n_layers=3 mo
 This uses the permuted sequential MNIST task and uses an s4 model with a specified number of layers, backbone dimension, and normalization type.
 
 
-### Hydra
-
-It is recommended to read the Hydra documentation to fully understand the configuration framework. For help launching specific experiments, please file an Issue.
-
 ### Registries
 
 This codebase uses a modification of the hydra `instantiate` utility that provides shorthand names of different classes, for convenience in configuration and logging.
 The mapping from shorthand to full path can be found in `src/utils/registry.py`.
 
-### WandB
+### Configuration and Logging
+Hydra & WandB  
 
 Logging with [WandB](https://wandb.ai/site) is built into this repository.
 In order to use this, simply set your `WANDB_API_KEY` environment variable, and change the `wandb.project` attribute of `configs/config.yaml` (or pass it on the command line `python -m train .... wandb.project=s4`).
@@ -185,60 +160,40 @@ Set `wandb=null` to turn off WandB logging.
 
 
 ## Models
-
 This repository provides a modular and flexible implementation of sequence models at large.
 
-#### SequenceModule
+- S4 [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/ss/s4.py)] [[standalone/all-in-one S4 layer](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/ss/standalone/s4.py)]
+- LSSLs [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/ss/lssl.py)]
+    - LSSL: `model/layer=lssl`
+    - LSSL-fix: `model/layer=lssl model.layer.learn=0`
+- HiPPO [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/hippo)]
+  - HiPPO-RNN: `model=rnn/hippo-legs` | `model=rnn/hippo-legt`
+- normal GRU?: `model=rnn/gru`
+- normal LSTM: `model=lstm`
+
+### SequenceModule
 SequenceModule `src/models/sequence/base.py` is the abstract interface that all sequence models adhere to.
 In this codebase, sequence models are defined as a sequence-to-sequence map of shape `(batch size, sequence length, input dimension)` to `(batch size, sequence length, output dimension)`.
 
 The SequenceModule comes with other methods such as `step` which is meant for autoregressive settings, and logic to carry optional hidden states (for stateful models such as RNNs or S4).
 
-#### SequenceModel
+### SequenceModel
 SequenceModel `src/models/sequence/model.py` is the main backbone with configurable options for residual function, normalization placement and type, etc.
 SequenceModel accepts a black box config for a layer. Compatible layers are SequenceModules (i.e. composable sequence transformations) found under `src/models/sequence/`.
-
-### S4
-
-This is the main model of this repository.
-See instructions in [Getting Started](#-structured-state-space-(s4)).
-
-### LSSL
-
-The LSSL is the predecessor of S4. It is currently not recommended for use, but the model can be found at `src/models/sequence/ss/lssl.py`.
-
-It can be run with `model/layer=lssl` or `model/layer=lssl model.layer.learn=0` for the LSSL-fixed model which does not train A, B, or dt.
-
-### HiPPO
-
-HiPPO is the mathematical framework upon which the papers HiPPO, LSSL, and S4 are built on.
-The logic for HiPPO operators is found under `src/models/hippo/`.
-
-HiPPO-RNN cells from the original [paper](https://arxiv.org/abs/2008.07669) can be found under the [RNN cells](#-rnns)
-
-### RNNs
-
-This codebase contains a flexible and modular implementation of many RNN cells.
-
-Some examples include `model=rnn/hippo-legs` and `model=rnn/hippo-legt` for HiPPO variants from the original [paper](https://arxiv.org/abs/2008.07669), or `model=rnn/gru` for a GRU reimplementation, etc.
-
-An exception is `model=lstm` to use the PyTorch LSTM.
-
-Example command (reproducing the Permuted MNIST number from the HiPPO paper, which was SotA at the time):
-```
-python train.py pipeline=mnist model=rnn/hippo-legs model.cell_args.hidden_size=512 train.epochs=50 train.batch_size=100 train.lr=0.001
-```
 
 ### Baselines
 Other sequence models are easily incorporated into this repository,
 and several other baselines have been ported.
 
-These include CNNs such as the [WaveGAN Discriminator](https://arxiv.org/abs/1802.04208) and [CKConv](https://arxiv.org/abs/2102.02611) and continuous-time/RNN models such as [UnICORNN](https://arxiv.org/abs/2102.02611) and [LipschitzRNN](https://arxiv.org/abs/2006.12070).
+- [WaveGAN Discriminator](https://arxiv.org/abs/1802.04208)
+- [CKConv](https://arxiv.org/abs/2102.02611)
+- continuous-time/RNN
+  - [UnICORNN](https://arxiv.org/abs/2102.02611)
+  - [LipschitzRNN](https://arxiv.org/abs/2006.12070)
 
 ```
 python -m train dataset=mnist model={ckconv,unicornn}
 ```
-
 
 
 ## Overall Repository Structure
@@ -259,7 +214,6 @@ src/             main source code for models, datasets, etc.
   utils/
 train.py         training loop entrypoint
 ```
-
 
 
 ## Citation
