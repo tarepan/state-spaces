@@ -25,6 +25,10 @@ from src.models.sequence.ss.kernel import HippoSSKernel
 from src.models.nn import LinearActivation, Activation
 
 class StateSpace(nn.Module):
+    """S4:  Structured State Space Sequence model
+
+    S4 ... layer? full model?
+    """
     requires_length = True
 
     def __init__(

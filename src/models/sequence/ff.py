@@ -3,9 +3,13 @@
 from torch import nn
 from src.models.sequence.base import SequenceModule
 from src.models.nn import LinearActivation
-
+a
 class FF(SequenceModule):
     def __init__(self, d_input, expand=2, d_output=None, transposed=False, activation='gelu', initializer=None, dropout=0.0):
+        """
+        Args:
+            activation: Activation between FC1 and FC2
+        """
         super().__init__()
         self.d_output = d_input if d_output is None else d_output
         self.transposed = transposed
@@ -29,6 +33,7 @@ class FF(SequenceModule):
             activate=False,
         )
 
+        # FC-Activation-Do-FC
         self.ff = nn.Sequential(
             linear1,
             drop,
