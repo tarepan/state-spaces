@@ -1,5 +1,13 @@
-# Structured State Spaces for Sequence Modeling
+<div align="center">
+
+# Structured State Spaces for Sequence Modeling <!-- omit in toc -->
+[![Paper](http://img.shields.io/badge/paper-arxiv.2111.00396-B31B1B.svg)][paper_s4]  
+
+</div>
+
 Implementations of S4/LSSL/HiPPO
+
+
 
 ## Setup
 
@@ -125,16 +133,6 @@ This repository provides a modular and flexible implementation of sequence model
 - normal GRU?: `model=rnn/gru`
 - normal LSTM: `model=lstm`
 
-### SequenceModel
-sequential model:: `(Batch, Length, Feature_i) => (Batch, Length, Feature_o)`  
-
-`SequenceModel` [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/model.py)] is backbone of multi-layer sequential models.  
-Layer is dependency and injected through arguments.  
-Interface of layer is `SequenceModule` [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/base.py)].  
- (i.e. composable sequence transformations) found under `src/models/sequence/`.
-
-The SequenceModule comes with other methods such as `step` which is meant for autoregressive settings, and logic to carry optional hidden states (for stateful models such as RNNs or S4).
-
 ### Baselines
 Other sequence models are easily incorporated into this repository,
 and several other baselines have been ported.
@@ -152,6 +150,21 @@ python -m train dataset=mnist model={ckconv,unicornn}
 ## Codebase
 Infrastructure: PyTorch-Lightning & Hydra  
 The structure of this integration largely follows the Lightning+Hydra integration template described in https://github.com/ashleve/lightning-hydra-template.
+
+- [training](https://github.com/tarepan/state-spaces/blob/main/train.py)
+
+### Models
+Default training is Encoder-SequenceModel-Decoder.  
+
+### SequenceModel
+sequential model:: `(Batch, Length, Feature_i) => (Batch, Length, Feature_o)`  
+
+`SequenceModel` [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/model.py)] is backbone of multi-layer sequential models.  
+Layer is dependency and injected through arguments.  
+Interface of layer is `SequenceModule` [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/base.py)].  
+ (i.e. composable sequence transformations) found under `src/models/sequence/`.
+
+The SequenceModule comes with other methods such as `step` which is meant for autoregressive settings, and logic to carry optional hidden states (for stateful models such as RNNs or S4).
 
 ### Registries
 This codebase uses a modification of the hydra `instantiate` utility that provides shorthand names of different classes, for convenience in configuration and logging.
@@ -178,6 +191,7 @@ train.py         training loop entrypoint
 
 
 ## Citation
+
 If you use this codebase, or otherwise found our work valuable, please cite:
 ```
 @article{gu2021efficiently,
@@ -203,3 +217,5 @@ If you use this codebase, or otherwise found our work valuable, please cite:
   year={2020}
 }
 ```
+
+[paper_s4]:https://arxiv.org/abs/2111.00396
