@@ -25,9 +25,7 @@ from src.models.sequence.ss.kernel import HippoSSKernel
 from src.models.nn import LinearActivation, Activation
 
 class StateSpace(nn.Module):
-    """S4:  Structured State Space Sequence model
-
-    S4 ... layer? full model?
+    """S4 layer: SSM-σ-segFC
     """
     requires_length = True
 
@@ -35,8 +33,8 @@ class StateSpace(nn.Module):
             self,
             H,
             l_max=None,
-            # Arguments for SSM Kernel
             d_state=64,
+            # HiPPO params
             measure='legs',
             dt_min=0.001,
             dt_max=0.1,
@@ -44,19 +42,20 @@ class StateSpace(nn.Module):
             trainable=None,
             lr=None,
             length_correction=False,
+            #
             stride=1,
-            weight_decay=0.0, # weight decay on the SS Kernel
+            weight_decay=0.0,
             precision=1,
             cache=False, # Cache the SS Kernel during evaluation
             # Arguments for FF
-            activation='gelu', # activation in between SS and FF
-            postact=None, # activation after FF
+            activation='gelu',
+            postact=None,
             weight_norm=False, # weight normalization on FF
             initializer=None, # initializer on FF
             input_linear=False,
             hyper_act=None,
-            dropout=0.0,
-            transposed=True, # axis ordering (B, L, D) or (B, D, L)
+            dropout:float=0.0,
+            transposed:bool=True,
             resample=False,
             use_state=False,
             verbose=False,
@@ -64,14 +63,29 @@ class StateSpace(nn.Module):
             keops=False,
         ):
         """
-        d_state: the dimension of the state, also denoted by N
-        l_max: the maximum sequence length, also denoted by L
-          if this is not known at model creation, or inconvenient to pass in,
-          set l_max=None and length_correction=True
-        dropout: standard dropout argument
-        transposed: choose backbone axis ordering of (B, L, D) or (B, D, L) [B=batch size, L=sequence length, D=feature dimension]
+        ops: [segFC-]SSMkernel-DMatrixResidual-[multiplivative-]σ-[dropout-]segFC[-σ]
+        default: SSMkernel-DMatrixResidual-σ-segFC
 
-        Other options are all experimental and should not need to be configured
+        Args:
+            H: Dimension of Feature
+            l_max: the maximum sequence length, also denoted by L
+              if this is not known at model creation, or inconvenient to pass in,
+              set l_max=None and length_correction=True
+            d_state: the dimension of the state, also denoted by N
+            activation: Activation function between SSM and segFC (a.k.a. FF)
+            dropout: Dropout probability
+            transposed: I/O dimension, (Batch, Length, Feature) if `not self.transposed` else (Batch, Feature, Length)
+            Experimental arguments
+            hyper_act: Whether to use hyper-network multiplication between SS and σ-segFC
+            weight_decay: weight decay on the SS Kernel (Unused)
+            postact: Activation function after segFC
+            measure:           HiPPO params
+            dt_min:            HiPPO params
+            dt_max:            HiPPO params
+            rank:              HiPPO params
+            trainable:         HiPPO params
+            lr:                HiPPO params
+            length_correction: HiPPO params
         """
 
         super().__init__()
@@ -91,9 +105,7 @@ class StateSpace(nn.Module):
         self.transposed = transposed
         self.resample = resample
 
-        self.D = nn.Parameter(torch.randn(self.h))
-
-        # Optional (position-wise) input transform
+        # pre-SSM segFC | Identity
         if input_linear:
             self.input_linear = LinearActivation(
                 self.h,
@@ -111,6 +123,9 @@ class StateSpace(nn.Module):
         self.kernel = HippoSSKernel(self.n, self.h, l_max, dt_min=dt_min, dt_max=dt_max, measure=measure, rank=rank, trainable=trainable, lr=lr, length_correction=length_correction, precision=precision, cache=cache, mode=mode, resample=resample, keops=keops)
         self.K = None # Cache the computed convolution filter if possible (during evaluation)
 
+        # SSM D matrix (?)
+        self.D = nn.Parameter(torch.randn(self.h))
+
         # optional multiplicative modulation
         self.hyper = hyper_act is not None
         if self.hyper:
@@ -124,12 +139,14 @@ class StateSpace(nn.Module):
                 weight_norm=weight_norm,
             )
 
-
+        # Activation between SSM and segFC
         self.activation = Activation(activation)
+
+        # Dropout | Identity
         dropout_fn = nn.Dropout2d if self.transposed else nn.Dropout
         self.dropout = dropout_fn(dropout) if dropout > 0.0 else nn.Identity()
 
-        # position-wise output transform to mix features
+        # segFC
         self.output_linear = LinearActivation(
             self.h,
             self.h,
@@ -145,13 +162,19 @@ class StateSpace(nn.Module):
 
 
     def forward(self, u, state=None, cache=None, **kwargs): # absorbs return_output and transformer src mask
-        """
-        u: (B H L) if self.transposed else (B L H)
-        state: (H N) never needed unless you know what you're doing
+        """Sequence-to-Sequence, basically SSM-σ-segFC
 
-        Returns: same shape as u
+        Args:
+            u: (Batch, L, H) if `not self.transposed` else (Batch, H, L)
+            state: (H N) never needed unless you know what you're doing
+
+        Returns:
+            (Batch, L, H) if `not self.transposed` else (Batch, H, L)
         """
+        # Identity | Linear
         u = self.input_linear(u)
+
+        # (Batch, L, H) => (Batch, H, L)
         if not self.transposed: u = u.transpose(-1, -2)
         L = u.size(-1)
 
@@ -176,7 +199,7 @@ class StateSpace(nn.Module):
         y_f = k_f * u_f
         y = torch.fft.irfft(y_f, n=2*L)[..., :L] # (B H L)
 
-        # Compute D term in state space equation - essentially a skip connection
+        # y_t = C*x_t + D*u_t over series, C*x_t is cumputed above.
         y = y + u * self.D.unsqueeze(-1)
 
         # Compute state update
@@ -191,10 +214,13 @@ class StateSpace(nn.Module):
             hyper = self.hyper_linear(u)
             y = hyper * y
 
+        # Activation and Dropout
         y = self.dropout(self.activation(y))
 
+        # (Batch, H, L) => (Batch, L, H)
         if not self.transposed: y = y.transpose(-1, -2)
 
+        # segFC
         y = self.output_linear(y)
 
         return y, next_state
