@@ -20,14 +20,21 @@ from src.tasks import encoders, decoders
 
 
 class SequenceModel(SequenceModule):
+    """
+    Multi-layer sequential model backbone.
+    Both Seq2Seq `forward` and Frame2Frame `step` are implemented.
+    Actual computation within a layer is delegated to layer module.
+    The dependencies (layer information) are injected through `layer` arguments,
+    and instanciated by SequenceResidualBlock.
+    """
     def __init__(
         self,
         d_model, # Resize input (useful for deep models with residuals)
-        n_layers=1, # Number of layers
+        n_layers:int=1,
         transposed=False,
         dropout=0.0, # Residual dropout parameter
         prenorm=True,
-        layer=None, # layer config, must be specified
+        layer=None,
         residual=None, # Residual config
         norm=None, # Normalization config (e.g. layer vs batch)
         pool=None,
@@ -36,6 +43,22 @@ class SequenceModel(SequenceModule):
         track_norms=True,
         dropinp=0.0,
     ):
+        """
+        Args:
+            d_model, # Resize input (useful for deep models with residuals)
+            n_layers: Number of layers
+            transposed=False,
+            dropout=0.0, # Residual dropout parameter
+            prenorm: Whether to use Pre-Normalization
+            layer: Injected layer information
+            residual=None, # Residual config
+            norm=None, # Normalization config (e.g. layer vs batch)
+            pool=None,
+            init=None,
+            verbose: Debug
+            track_norms=True,
+            dropinp=0.0,
+        """
         super().__init__()
         # Save arguments needed for forward pass
         self.d_model = d_model
@@ -62,14 +85,13 @@ class SequenceModel(SequenceModule):
         # Duplicate layers
         layers = layer * n_layers
 
-        # Instantiate layers
+        # Instantiate layers from layer information
         _layers = []
         d = d_model
         for l, layer in enumerate(layers):
             block = SequenceResidualBlock(d, l+1, prenorm=prenorm, dropout=dropout, layer=layer, residual=residual, norm=norm, pool=pool)
             _layers.append(block)
             d = block.d_output
-
         self.d_output = d
         self.layers = nn.ModuleList(_layers)
 

@@ -125,15 +125,15 @@ This repository provides a modular and flexible implementation of sequence model
 - normal GRU?: `model=rnn/gru`
 - normal LSTM: `model=lstm`
 
-### SequenceModule
-SequenceModule `src/models/sequence/base.py` is the abstract interface that all sequence models adhere to.
-In this codebase, sequence models are defined as a sequence-to-sequence map of shape `(batch size, sequence length, input dimension)` to `(batch size, sequence length, output dimension)`.
+### SequenceModel
+sequential model:: `(Batch, Length, Feature_i) => (Batch, Length, Feature_o)`  
+
+`SequenceModel` [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/model.py)] is backbone of multi-layer sequential models.  
+Layer is dependency and injected through arguments.  
+Interface of layer is `SequenceModule` [[code](https://github.com/tarepan/state-spaces/tree/main/src/models/sequence/base.py)].  
+ (i.e. composable sequence transformations) found under `src/models/sequence/`.
 
 The SequenceModule comes with other methods such as `step` which is meant for autoregressive settings, and logic to carry optional hidden states (for stateful models such as RNNs or S4).
-
-### SequenceModel
-SequenceModel `src/models/sequence/model.py` is the main backbone with configurable options for residual function, normalization placement and type, etc.
-SequenceModel accepts a black box config for a layer. Compatible layers are SequenceModules (i.e. composable sequence transformations) found under `src/models/sequence/`.
 
 ### Baselines
 Other sequence models are easily incorporated into this repository,

@@ -18,6 +18,12 @@ import src.utils.registry as registry
 
 
 class SequenceResidualBlock(SequenceModule):
+    """
+    Single layer sequential model backbone.
+    Ops are 'Res(PreNorm-Layer-Do)-PostNorm-Pool', all elements expect for `layer` are optional.
+    The dependency (layer) is injected through argument, so it is blackbox op.
+    Both Seq2Seq `forward` and Frame2Frame `step` are implemented.
+    """
     def __init__(
             self,
             d_input,
